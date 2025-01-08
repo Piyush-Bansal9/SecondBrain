@@ -1,4 +1,4 @@
-import mongoose, { Schema } from "mongoose";
+import mongoose, { mongo, Schema } from "mongoose";
 import { string } from "zod";
 
 const userSchema = new Schema({
@@ -10,5 +10,13 @@ const userSchema = new Schema({
 const contentSchema = new Schema({
     type: {type: String, required: true},
     link: String,
-    
+    user: { type: Schema.Types.ObjectId, required: true}
 })
+
+const tagsSchema = new Schema({
+    title: String,
+})
+
+export const userModel = mongoose.model("user", userSchema);
+export const contentModel = mongoose.model("content", contentSchema);
+export const tagsModel = mongoose.model("tags", tagsSchema);
