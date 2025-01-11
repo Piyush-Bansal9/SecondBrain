@@ -1,10 +1,18 @@
 import express from "express";
-import mongoose from "mongoose";
+import mongoose, { mongo } from "mongoose";
+import dotenv from "dotenv";
 import jwt from "jsonwebtoken";
 import { z } from "zod"
 import {userModel, contentModel, tagsModel} from "./db"
-mongoose.connect("mongodb+srv://piyush_bansal9:q91h6gb0kblzqQMz@cluster0.f3dh4.mongodb.net/SecondBrainDatabase");
-const JWT_variable = "abcdefghijkl-0123456"
+import { auth } from "./middlewares"
+import bcrypt from "bcrypt"
+
+dotenv.config();
+const port = process.env.PORT;
+const jwt_secret = process.env.JWT_SECRET;
+const database_url = process.env.DATABASE_URL;
+
+mongoose.connect(database_url as string);
 
 const app = express();
 app.use(express.json())
@@ -37,12 +45,13 @@ app.post("/api/v1/signup", async (req, res)=> {
             const foundData = await userModel.findOne({
                 email: validationResult.data?.email
             });
-            console.log(foundData);
             if (!foundData) {
+                const password = validationResult.data.password;
+                const hashedPassword = await bcrypt.hash(password, 5);
                 await userModel.create({
                     email: validationResult.data?.email,
                     name: validationResult.data?.name,
-                    password: validationResult.data?.password
+                    password: hashedPassword
                 });
                 res.status(200).json({
                     message: "You have signed up!"
@@ -50,7 +59,7 @@ app.post("/api/v1/signup", async (req, res)=> {
                 return;
             } else {
                 res.status(403).json({
-                    message: "Email already exists."
+                    message: "Email already exists." 
                 })
             }
         }
@@ -58,7 +67,82 @@ app.post("/api/v1/signup", async (req, res)=> {
         res.status(500).json({
             message: "Internal server error."
         });
-        return;
+        return; 
     }
 });
-app.listen(3000);
+
+app.post("/api/v1/signin", async (req, res) => {
+    try{
+        const email = req.body.email;
+        const name = req.body.name;
+        const password = req.body.password;
+        const foundData = await userModel.findOne({
+            email: email,
+            name: name
+        })
+        if(!foundData){
+            res.status(403).json({
+                message: "Wrong usenrame or email."
+            })
+        }else{
+            const passwordMatch = bcrypt.compare(password, foundData.password);
+            if(passwordMatch as object){
+                const token = jwt.sign({
+                    id: foundData._id
+                }, jwt_secret as string)
+                res.json({
+                    token
+                })
+            }else{
+                res.status(403).json({
+                    message: "Wrong password."
+                })
+            }
+        }
+    }catch(e){
+        res.status(500).json({
+            message: "Internal server error."
+        })
+    }
+})
+
+app.post("/api/v1/content", auth, async (req, res) => {
+    const title = req.body.title;
+    const link = req.body.link;
+    await contentModel.create({
+        title: title,
+        link: link,
+        //@ts-ignore
+        user: req.userID,
+        tags: []
+    })
+    res.json({
+        message: "Content added."
+    })
+})
+
+app.get("/api/v1/content", auth, async (req, res) => {
+    //@ts-ignore
+    const userID = req.userID;
+    const foundContent = await contentModel.find({
+        user: userID
+    }).populate("userID", "name")
+    res.json({
+        foundContent
+    })
+})
+
+app.delete("/api/v1/content", auth, async (req, res) => {
+    const contentID = req.body.contentID;
+    
+    await contentModel.deleteMany({
+        contentID,
+        //@ts-ignore
+        user: req.userID
+    })
+})
+
+app.post("/api/v1/brain/share", auth, (req, res) => {
+
+})
+app.listen(port);
